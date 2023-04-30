@@ -1,0 +1,192 @@
+![](images/dcu.jpeg){width="167"}, ![](images/unicef.png){width="164"}
+
+![](images/child%20deprivation.jpg){width="333"}
+
+---
+title: "My Quarto Publication"
+author: "Your Name"
+output:
+  quarto::html_document:
+    self_contained: true
+---
+
+---
+title: "MT5000-Data Analytics & Visualization Assignment 2"
+author: "Ninad Madhwani - 21270613"
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+total_population <- read_csv("D:/MODULE MATERIAL/S2_MT5000 - Data Analytics and Visualization/2nd Assignment - RStudio/Draft 2/Total_Population.csv")
+life_expectancy <- read_csv("D:/MODULE MATERIAL/S2_MT5000 - Data Analytics and Visualization/2nd Assignment - RStudio/Draft 2/Life_expectancy.csv")
+deprivation_children <- read_csv("D:/MODULE MATERIAL/S2_MT5000 - Data Analytics and Visualization/2nd Assignment - RStudio/Draft 2/Deprivation_Children.csv")
+```
+
+## Introduction
+
+This **dashboard** presents world data from UNICEF database of the following indicators across countries both Male and Female Gender:
+
+1.  *Total Population* (2011-2023)
+2.  *Life Expectancy* at birth (2011-2023)
+3.  *Moderate Homogeneous Standards, At least [**TWO**]{.underline} Deprivations in Children* (2011-2023)
+
+### What the Dashboard is about?
+
+The dashboard showcases visualizations of key demographic indicators such as total population, life expectancy, and child deprivation. These visualizations reveal patterns, trends, and connections between these indicators across countries and over time. The interactive features allow users to explore specific countries and gain insights into the impacts of events like the Covid-19 pandemic on life expectancy.\
+\
+To view a more interactive Dashboard, please visit the [UNICEF_DEPRIVATION\_&\_LIFE_EXPECTANCY_DASHBOARD](https://public.tableau.com/app/profile/ninad.madhwani/viz/UNICEF_DEPRIVATION__LIFE_EXPECTANCY_DASHBOARD/Dashboard1 "by Ninad M")
+
+### Data Sources
+
+The dashboard uses data from UNICEF data files:
+
+-   `Total_Population.csv`
+-   `Life_expectancy.csv`
+-   `Deprivation_Children.csv`
+
+## Visualizations
+
+### 1. World Map Chart
+
+The World Map chart presents data of the Total Population of each country in the world for year 2023, This is a heat world map chart.
+
+```{r world_map, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(sf)
+library(rnaturalearth)
+library(scales)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+total_population_2023 <- total_population %>% filter(YEAR == 2023, SEX == "Total")
+world_pop <- world %>% left_join(total_population_2023, by = c("adm0_a3" = "CODE"))
+
+p <- ggplot(world_pop) +
+  geom_sf(aes(fill = OBS_VALUE, text = paste(name, comma(OBS_VALUE), sep = ": ")), color = "black") +
+  scale_fill_gradient(low = "white", high = "lightgreen", na.value = "transparent", labels = comma) +
+  theme_minimal() +
+  labs(title = "Total Population by Country (2023)", fill = "Population")
+
+plotly::ggplotly(p, tooltip = c("text"))
+```
+
+### 2. Bar Chart
+
+Bar chart showing total population by gender for the top 10 countries in 2023, with **pink bars** representing **females** and **light blue** bars representing **males**.
+
+```{r bar_chart, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(plotly)
+
+# Filter the data for the year 2023
+population_2023 <- total_population %>%
+  filter(YEAR == 2023)
+
+# Get the top 10 countries with the highest total population
+top10_countries <- population_2023 %>%
+  group_by(COUNTRY) %>%
+  summarise(Total_Population = sum(OBS_VALUE)) %>%
+  top_n(10, Total_Population) %>%
+  arrange(desc(Total_Population)) %>%
+  pull(COUNTRY)
+
+# Filter the data for the top 10 countries and exclude the "Total" category
+top10_population <- population_2023 %>%
+  filter(COUNTRY %in% top10_countries) %>%
+  filter(SEX %in% c("Male", "Female"))  # Exclude the "Total" category if present
+
+# Create the bar plot with tooltips
+bar_chart <- top10_population %>%
+  ggplot(aes(x = reorder(COUNTRY, -OBS_VALUE), y = OBS_VALUE, fill = SEX)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("pink", "lightblue"), labels = c("Male", "Female")) +
+  scale_y_continuous(labels = function(x) ifelse(x >= 1e9, paste(x / 1e9, "B"), paste(x / 1e6, "M"))) +
+  labs(title = "Total Population by Country and Gender for Top 10 Countries (2023)",
+       x = "Country",
+       y = "Population") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+# Convert the ggplot chart to plotly for interactivity
+plotly::ggplotly(bar_chart, tooltip = c("OBS_VALUE"))
+```
+
+### 3. Scatter-plot with Linear Regression Line
+
+The Scatter Plot visualizes the presence of at least two deprivations of Homogeneous moderate standards in children over time. Each data point represents a country's deprivation percentage for a specific year. The plot shows the distribution of these deprivations across different years, with the y-axis representing the percentage of children affected by the deprivations. The plot includes a logarithmic y-axis scale to accommodate a wide range of values. Additionally, the plot displays a blue regression line that represents the overall trend in the data. Country labels are added to the plot using text annotations to identify each data point. This interactive visualization allows for an exploration of the patterns and variations in deprivation levels across different countries and years.
+
+```{r scatter_plot, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(plotly)
+library(ggrepel)
+
+
+# Filter and prepare the data
+deprivation_filtered <- deprivation_children %>%
+  filter(INDICATOR == "TWO deprivation. Homogeneous moderate standards",
+         SEX == "Total")
+
+# Calculate the linear regression coefficients
+lm_fit <- lm(OBS_VALUE ~ YEAR, data = deprivation_filtered)
+lm_coef <- coef(lm_fit)
+
+# Create a new data frame with the fitted values
+fitted_data <- data.frame(YEAR = deprivation_filtered$YEAR,
+                          OBS_VALUE = lm_coef[1] + lm_coef[2] * deprivation_filtered$YEAR)
+
+# Create the scatter plot with tooltips and linear regression line
+scatter_plot_two_deprivations <- ggplot(deprivation_filtered, aes(x = YEAR, y = OBS_VALUE)) +
+  geom_point() +
+  geom_line(data = fitted_data, aes(x = YEAR, y = OBS_VALUE), color = "blue") +
+  scale_y_continuous(trans = "log10", labels = scales::comma) +
+  labs(title = "Scatter Plot of Two Deprivations with Logarithmic Y-Axis",
+       x = "Year",
+       y = "Deprivations (%)") +
+  theme_minimal()
+
+interactive_plot <- ggplotly(scatter_plot_two_deprivations, tooltip = c("OBS_VALUE")) %>%
+  layout(title = "Two Deprivations of Homogenous Moderate Standards in children",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Deprivations (%)"))
+
+interactive_plot
+```
+
+### 4. Time-Series chart
+
+The time-series chart displays the average life expectancy for males and females across all countries. It highlights the period from 2020 to 2022 as the time when the world was in the Covid-19 pandemic, representing the impact of the pandemic on life expectancy.
+
+```{r time_Series_Chart, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+# Calculate the average life expectancy for males and females across all countries
+average_life_expectancy <- life_expectancy %>%
+  filter(!is.na(OBS_AGE_YEARS)) %>%
+  group_by(YEAR, SEX) %>%
+  summarise(avg_life_expectancy = mean(OBS_AGE_YEARS))
+
+# Plot the time series chart of average life expectancy
+ggplot(average_life_expectancy, aes(x = YEAR, y = avg_life_expectancy, color = SEX)) +
+  geom_line() +
+  geom_rect(aes(xmin = 2020, xmax = 2022, ymin = -Inf, ymax = Inf),
+            fill = "lightblue", alpha = 0.2) +
+  annotate("text", x = 2021, y = max(average_life_expectancy$avg_life_expectancy), 
+           label = "Covid-19", vjust = 1, hjust = 0.5, color = "black") +
+  labs(title = "Time Series Chart of Average Life Expectancy",
+       x = "Year",
+       y = "Average Life Expectancy (Years)",
+       color = "Sex") +
+  theme_minimal() +
+  scale_x_continuous(breaks = seq(min(average_life_expectancy$YEAR), max(average_life_expectancy$YEAR), by = 1))
+```
+
+**REPORT END**
